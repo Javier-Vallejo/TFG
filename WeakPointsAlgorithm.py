@@ -43,25 +43,25 @@ def isSolutionNX(conectedComponents: int, components: list, maxNodePerComponent:
 
 
 def criticalNodes(
-    nodes: list, adycList: list, maxNodePerComponent: int, Graph, nodesDeleted: list
+    nodes: list, adycList: list, maxNodePerComponent: int, Graph, nodesDeleted: list , i:int
 ):
     graphCutSet = []
     nodesSelected = set()
     solutionFound = False
+    if i == 8:
+        print()
     graphCuts = list(nx.all_node_cuts(Graph))
-    firstNodeCut = []
+    firstCutSet = []
     
     for nodeCutSet in graphCuts:
                 cutSet = []
                 for nodeInSet in nodeCutSet:
                     cutSet.append(nodeInSet)
-                firstNodeCut.append(cutSet)
+                firstCutSet.append(cutSet)
     
-    newNodeCut = True
 
     while not solutionFound and nodes:
         if not graphCuts:
-            newNodeCut = True
             largest_component_nodeList = max(nx.connected_components(subgraph), key=len)
             # aqui entra despues de que haya creado el subgrafo , mirado si ya vale como solucion
             # y visto que no, entonces a partir de ese subgrafo vuelve a generar otros putnos de corte
@@ -103,54 +103,88 @@ def criticalNodes(
         nodesPerComponent = getNodesPerComponent(conectedComponents, components)
         # esto tendrá cuantos nodos hay por componente
 
-        # habia intentado ver si era mas rapido con este codigo:
-        #  if len(components) > 1:
-        #     for component in components:
-        #         numberOfNodes = len(component)
-        #         # si component es una lista que tiene los nodos que han surgido tras separar el grafo len de eso se queda con el numero
-        #         nodesPerComponent.append(numberOfNodes)
-        #     # se comprueba si es solucion solo en el caso de que haya mas de un componente
-        #     solutionFound = isSolutionNX(nodesPerComponent,maxNodePerComponent)
-        # Pero tarda como 10 segundos mas por grafo en lugar de 40 va a 50
         if nodesPerComponent:
             solutionFound = isSolutionNX(conectedComponents, nodesPerComponent, maxNodePerComponent)
 
     if not nodes:
         return -1
-    sol2, newCutSets = generateNewSol(Graph, nx.nodes(Graph), graphCutSet, maxNodePerComponent, firstNodeCut)
     
-    newNodes = sol2 - nodesSelected
+    # a partir de aqui algorimto de mejora
     
-    while not isBetter(newCutSets,newNodes):
-        sol2, newCutSets = generateNewSol(Graph, nx.nodes(Graph), graphCutSet, maxNodePerComponent, firstNodeCut)
-        newNodes = sol2 - nodesSelected
+    if moreThanOneCut(graphCutSet,firstCutSet): # esto comprueba que la solucion 
+        #se llega con mas de una iteracion de los kcutsets
+        # porque si no no hay por donde mejorar
+        
+        cutSetsAvaliables = copy.deepcopy(graphCutSet) # esto esta para comprobar el optimo local
+        # porque se intenta sacar a partir de un conjunto de corte que no sea de los primeros 
+        # y que este te de una solucion que puedas hacer un cambio
+        # de un conjunto de corte por otro de un tamaño menor
+        
+        # entonces se hace esta nueva variable para ir iteranbdo 
+        # sobre los distintos nuevos puntos o conjuntos de corte
+        
+        for cutSet in firstCutSet:
+            cutSetsAvaliables.remove(cutSet)
+            
+        # lo primero es que se le quitan los conjuntos que se hayan usado al principio 
+        # ya que esos no valen
+        
+        maxSize = getMaxSize(graphCutSet) # con esto se obtiene el tamaño del conjunto de corte
+        # mas grande del grafo
+    
+        sol2, newCutSets,solutionsChoosed = generateNewSol(Graph, nx.nodes(Graph), graphCutSet, maxNodePerComponent, firstCutSet)
+        # aqui se genera una nueva solucion se obtiene tambien unos nuevos conjuntos de corte 
+        # y se obtiene el primer conjunto usado para buscar la mejora.
+        
+        newNodes = sol2 - nodesSelected # despues de obtienen que nuevos nodos se han utilizado
+        
+        canImprove = isBetter(newCutSets,newNodes,maxSize) # con esta funcion se quiere mirar si 
+        # se ha generado una solucion que tenga por lo menos 1 conjunto de corte de tamaño menor 
+        # a los mas grandes de la primera solucion 
+        
+        while not canImprove and cutSetsAvaliables:
+            sol2, newCutSets,solutionsChoosed = generateNewSol(Graph, nx.nodes(Graph), cutSetsAvaliables, maxNodePerComponent, firstCutSet)
+            cutSetsAvaliables.remove(solutionsChoosed)
+            # se quita la solucion usada para evitar volver a usarla 
+            # y asi ir agilizando en el proceso
+            newNodes = sol2 - nodesSelected
+            if newNodes:
+                canImprove = isBetter(newCutSets,newNodes,maxSize)
+        
+        # este while se utiliza para que se generen nuevas soluciones mientras 
+        # queden opciones por utilizarse y que aun no se haya generado una que tenga opcion de mejora
+        
+        # se saldra o porque se ha llegado a una solucion que permita la mejora o
+        # que se hayan usado todas las opciones posibles
 
+
+        if canImprove: # si se entra en este if es que se puede mejorar 
+            # asi que se devuelve esa mejora en la sol
+            graphCutsImproved,newSolutionNodes = improveSol(graphCutSet,newCutSets,newNodes,maxNodePerComponent,Graph,nodesSelected)
+            print("Solucion Mejorada: ", i)
+            return newSolutionNodes
+        
+        # si se llega aqui es que se han usado todas las opciones posibles. 
+        # asi que no se ha podido mejorar
+        print("Solucion Casi mejorada: ", i)
+        return nodesSelected
+        
+    # y este ultimo caso es cuando se genere una solucion con unos unicos conjuntos de corte.
+    print("Solucion: ", i)
+    return nodesSelected
+
+def getMaxSize(graphCutSet:list):
+    larguestCut = max(graphCutSet, key=len)
+        
+    maxSize = len(larguestCut)
+    return maxSize
     
 
-    graphCutsImproved,newSolutionNodes = improveSol(graphCutSet,newCutSets,newNodes,maxNodePerComponent,Graph,nodesSelected)
-
-    
-
-    # while not betterSol:
-    #     sol2 = generateNewSol(Graph, nx.nodes(Graph), graphNodeCut, maxNodePerComponent, firstNodeCut)
-    #     betterSol = isBetterSol(sol2,nodesSelected)
-
-    # nodesBestSol = list(nx.nodes(Graph))
-
-    # for node in sol2:
-    #     nodesBestSol.remove(node)
-
-    # subgraphBS = nx.induced_subgraph(Graph, nodesBestSol)
-
-    # components = list(nx.connected_components(subgraphBS))
-
-    # conectedComponents = nx.number_connected_components(subgraphBS)
-
-    # nodesPerComponent = getNodesPerComponent(conectedComponents, components)
-
-    # solutionFoundB = isSolutionNX(conectedComponents, nodesPerComponent, maxNodePerComponent)
-
-    return sol2
+def moreThanOneCut(graphCutSet,firstNodeCut):
+    for cutSet in graphCutSet:
+        if not cutSet in firstNodeCut:
+            return True
+    return False 
 
 
 def getNodesPerComponent(numberOfComponents, components):
@@ -158,7 +192,8 @@ def getNodesPerComponent(numberOfComponents, components):
     if numberOfComponents > 1:
         for component in components:
             numberOfNodes = len(component)
-            # si component es una lista que tiene los nodos que han surgido tras separar el grafo len de eso se queda con el numero
+            # si component es una lista que tiene los nodos que han surgido tras separar el grafo 
+            # usar len en eso se queda con el numero
             nodesPerComponent.append(numberOfNodes)
     return nodesPerComponent
 
@@ -172,32 +207,29 @@ def generateNewSol(Graph, nodes, graphCutSet, maxNodePerComponent, firstNodeCuts
     
     sameCut = False
 
+    
     nodeCut = random.choice(graphCutSet)
     for firstNodeCut in firstNodeCuts:
         if nodeCut == firstNodeCut:
             sameCut = True
-            
+    
+                
     while sameCut:
         nodeCut = random.choice(graphCutSet)
         sameCut = False
         for firstNodeCut in firstNodeCuts:
             if nodeCut == firstNodeCut:
-                sameCut = True
+                sameCut = True    
+
             
     # se comprueba que el primero no es de la siguiente forma:
     # 1º se escoge uno y se comprueba con los primeros nodos de corte que no coincida
-    # 2º Si se ha dado el caso de que sea Iguakse entra en el while
+    # 2º Si se ha dado el caso de que sea Igual se entra en el while
     # donde se escoge otro y se parte de que no es igual. 
     # SI no es igual no entrara en el if y se saldra 
     # y si es igual se vuelve a poner a true la variable 
     # y se volvera a iterar el while
   
-    
-    # nodeCutT = max(graphNodeCut, key=len)
-    # if nodeCutT == firstNodeCut:
-    #     nodeCutT = sorted(graphNodeCut, key=len, reverse=True)[1]
-    # coger el segundo mas gradne si justo el primero es el primero
-    #  que se cogio al principio del algoritmo
     newGraphCutSet.append(nodeCut[:])
 
     for node in nodeCut:
@@ -205,11 +237,14 @@ def generateNewSol(Graph, nodes, graphCutSet, maxNodePerComponent, firstNodeCuts
             nodesSelected2.add(node)
             nodeList.remove(node)
 
-    subgraph = nx.induced_subgraph(Graph, nodeList)
+    subgraph = nx.induced_subgraph(Graph, nodeList) # despues de hacer el primer cambio en el grafo
+    # y quitar los primeros nodos se genera el siguiente sugrafo
 
     largest_component_nodeList = max(nx.connected_components(subgraph), key=len)
+    # para ver su nueva lista de nodos
 
     largest_component = nx.induced_subgraph(subgraph, largest_component_nodeList)
+    # de donde luego sacar su componente mas gradne para volver a separarlo
 
     while not newSolFound:
 
@@ -220,23 +255,33 @@ def generateNewSol(Graph, nodes, graphCutSet, maxNodePerComponent, firstNodeCuts
                 for nodeInSet in nodeCutSet:
                     cutSet.append(nodeInSet)
                 newGraphCutSet.append(cutSet)
+        
+        # este fragmento del algoritmo se encarga de generar una lista con los conjuntos de corte
 
         for nodeSet in subGraphNodesCuts:
             for node in nodeSet:
                 if node in nodeList:
                     nodesSelected2.add(node)
                     nodeList.remove(node)
+        
+        # despues de se vuelve a quitar los nodos del grafo y añadirlos a una solucion
+        
+        # y se genera el sugrafo siguiente para quedarse con los nodos que haya por componete conexa
+        # en el subgrafo y despues se comprueba si esos nodos que han generado el subgrafo ya son solucion o no
+        
 
         newGraphSolution = nx.induced_subgraph(subgraph, nodeList)
 
         components = list(nx.connected_components(newGraphSolution))
+        # esta variable es una lista de listas donde cada lista es un componente conexo
+        # y los elementos de esa lista son los nodos de ese componente
 
-        conectedComponents = nx.number_connected_components(newGraphSolution)
+        numberOfComponents = nx.number_connected_components(newGraphSolution)
 
-        nodesPerComponent = getNodesPerComponent(conectedComponents, components)
+        nodesPerComponent = getNodesPerComponent(numberOfComponents, components)
 
         newSolFound = isSolutionNX(
-            conectedComponents, nodesPerComponent, maxNodePerComponent
+            numberOfComponents, nodesPerComponent, maxNodePerComponent
         )
 
         largest_component_nodeList = max(
@@ -246,15 +291,17 @@ def generateNewSol(Graph, nodes, graphCutSet, maxNodePerComponent, firstNodeCuts
         largest_component = nx.induced_subgraph(
             newGraphSolution, largest_component_nodeList
         )
+        
+        # si no se llega a ser solucion, entonces se queda con el subgarfo mas grande del primer subgrafo 
+        # y con este se volverá a iterar en el while 
 
-    return nodesSelected2, newGraphCutSet
+    return nodesSelected2, newGraphCutSet,nodeCut
 
 
 def improveSol(graphCutSets:list, newGraphCutSets:list,newNodes:set,maxNodePerComponent,graph,nodesSelected):
     newSolutionNodes = []
     a = len(nodesSelected)
     nodeList = list(nx.nodes(graph))
-    # previusStepList = nodeList[:]
     previusStepList = copy.deepcopy(nodeList)
     # smaller = False
     validChangeDone = False
@@ -268,7 +315,6 @@ def improveSol(graphCutSets:list, newGraphCutSets:list,newNodes:set,maxNodePerCo
         for node in newCutSet:
             newNodes.discard(node)
             
-        # smaller = False
         validChangeDone = False 
     
         for i  in range(len(graphCutSets)):
@@ -276,20 +322,20 @@ def improveSol(graphCutSets:list, newGraphCutSets:list,newNodes:set,maxNodePerCo
             if len(newCutSet) < len(cutSet) and not validChangeDone:
                 bakUp = cutSet[:]
                 graphCutSets[i] = newCutSet 
-                # smaller = True
                 nodeList,newSolutionNodes = generateNewNodeList(graphCutSets,nodeList,bakUp)
-                # nodesDeleted = nodesSelected - newSolutionNodes
                 validChangeDone = isValidImprovement(graph,nodeList,maxNodePerComponent)
                 if not validChangeDone:
                     graphCutSets[i] = bakUp
                     nodeList = list(nx.nodes(graph))
-                #     nodeList = previusStepList
-                # previusStepList = nodeList[:]
-                #  si el cambio no es valido se deshace
+                #  si el cambio no es valido se deshace poniendo otra vez el conjunto que habia al principio
+                #  y dejando los nodos del grafo como al principio para que el algorimto funcione correctamente
                 else:
                     graphCutSets = deleteNodesInCutSets(graphCutSets,bakUp)
-        if validChangeDone:
-            print(bakUp)
+                    # si el cambio es bueno se mira si el nodo que se empleaba en un conjunto de corte sigue en otros 
+                    # y se elimina para que no se utilice en ninguna ocasion como conjunto de corte
+                    # por ejemplo: si no se utiliza el conjunto {2,3}
+                    # quiere decir que ni el 2 ni el 3 son nodos que sean puntos criticos
+                    # asi que tampoco se podria utlizar el conjunto {3,6} o {2,5} se quedarian como {6} o como {5}
                     
                      
                    
@@ -307,7 +353,8 @@ def generateNewNodeList(graphCutSets:list,nodeList:list,bakUp:list):
                 newSolutionNodes.add(node)
                 nodeListCopy.remove(node)
     return nodeListCopy,newSolutionNodes
-    
+    # genera los nuevos nuevos nodos como soluciom de puntos criticos y los elimina de los nodos del grafo 
+    # para luego usarlos para comprobar si este cambio de conjuntos de corte es valido
     
 def deleteNodesInCutSets(graphCutSets:list,bakUp:list):
     for cutSet in graphCutSets:
@@ -317,17 +364,21 @@ def deleteNodesInCutSets(graphCutSets:list,bakUp:list):
     return graphCutSets
     
 
-def isValidImprovement(graph,nodeList:list,maxNodePerComponent):
+def isValidImprovement(graph,nodeList:list,maxNodePerComponent): 
+    
+        # esto con la nueva lista de nodos verifica que siga teniendo el grafo separado y que se cumpla la condicion de solucion
+        # haciendo la misma comprobacion que se hacia para generar las primeras soluciones
+        
         newGraphSolution = nx.induced_subgraph(graph, nodeList)
 
         components = list(nx.connected_components(newGraphSolution))
 
-        conectedComponents = nx.number_connected_components(newGraphSolution)
+        numberOfComponents = nx.number_connected_components(newGraphSolution)
 
-        nodesPerComponent = getNodesPerComponent(conectedComponents, components)
+        nodesPerComponent = getNodesPerComponent(numberOfComponents, components)
 
         newSolFound = isSolutionNX(
-            conectedComponents, nodesPerComponent, maxNodePerComponent
+            numberOfComponents, nodesPerComponent, maxNodePerComponent
         )
         return newSolFound
 
@@ -339,25 +390,21 @@ def getNodeCut(newGraphNodeCut:list,newNodes:set):
             if node == newNodeCut:
                     newNodeSet = nodeCut[:]                   
                     return newNodeSet
+    
+    # esto se utiliza para a traves de los nodos que se han encontrado como solucion
+    # se obtenga su punto de corte de correspondiente
                 
                 
-def isBetter(newGraphNodeCut:list,newNodes:set):
+def isBetter(newGraphNodeCut:list,newNodes:set,maxSize:int):
     newNodesCopy = set(newNodes)
     while newNodesCopy:
         newNodeCut = newNodesCopy.pop()
         for nodeCut in newGraphNodeCut:
             for node in nodeCut:
-                if node == newNodeCut and len(nodeCut) == 1:
+                if node == newNodeCut and len(nodeCut) < maxSize:
                         return True
+    return False
+
+# y esta funcion se encarga de verificar que la nueva solucion generada tenga opcion de mejora
+# es decir tenga algun de corte que sea de menor tamaño que los que tiene la primera solucion
     
-
-
-
-def isBetterSol(sol1, sol2):
-    if len(sol1) < len(sol2):
-        return True
-    else:
-        return False
-
-
-# 
