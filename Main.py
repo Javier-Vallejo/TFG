@@ -1,4 +1,5 @@
 import os
+import time
 import GraphGenerator
 import WeakPointsAlgorithm
 
@@ -7,13 +8,22 @@ if __name__ == "__main__":
     directoryPath = "Graphs"
     graphList = os.listdir(directoryPath)
     solutions = []
-    i = 1
-    for fileName in graphList:
+    graphTimes = []
+    graphIndex = 1
+    totalTime = 0.0
+    percentage = 1 
+    instancesUsed = int(len(graphList)*percentage)
+    for i in range(instancesUsed):
+        fileName = graphList[i]
         adjList, nodes, alpha,Graph,nodesDeleted = GraphGenerator.genAdjList(fileName)
-        # he comporbado que por lo general no me suele tardar mucho en hacer este paso
-        criticalNodes = WeakPointsAlgorithm.criticalNodes(nodes, adjList, alpha,Graph,nodesDeleted,i)
+        startTime = time.time()
+        criticalNodes = WeakPointsAlgorithm.criticalNodes(nodes, adjList, alpha,Graph,nodesDeleted,graphIndex)
         while criticalNodes == -1:
-            criticalNodes = WeakPointsAlgorithm.criticalNodes(nodes, adjList, alpha,i)
-        i+=1
+            criticalNodes = WeakPointsAlgorithm.criticalNodes(nodes, adjList, alpha,Graph,nodesDeleted,graphIndex)
+        endTime = time.time()
+        graphEjecutionTime = endTime - startTime
+        totalTime = totalTime + graphEjecutionTime
+        graphTimes.append(graphEjecutionTime)
+        graphIndex+=1
         solutions.append(criticalNodes)
-    print()
+    print() 
